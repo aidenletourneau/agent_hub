@@ -1,11 +1,11 @@
-"use client";
+"use client"
 
 import { useState } from "react";
 
 function GoogleLoginButton() {
   const handleLogin = () => {
     // Redirect user to your backend’s Google OAuth route
-    window.location.href = "http://localhost:8000/auth/login";
+    window.location.href = "http://localhost:8000/auth/googleLogin";
   };
 
   return (
@@ -29,9 +29,6 @@ export default function LoginPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Email:", email);
-    console.log("Password:", password);
-    // You can call your backend API here (e.g., fetch('/api/login', ...))
   };
 
   return (

@@ -33,7 +33,7 @@ export default function RootLayout({
 
                 <NavigationMenuItem>
                   <NavigationMenuLink asChild>
-                    <Link href="/login">Login</Link>
+                    <Link href="/signup">Sign Up</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               </NavigationMenuList>
