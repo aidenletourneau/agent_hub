@@ -33,24 +33,22 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # agent mapping
+    agents: Mapped[list["Agent"]] = relationship("Agent", back_populates="user", cascade="all, delete-orphan")
 
 
-# def utcnow() -> datetime:
-#     return datetime.now(timezone.utc)
+class Agent(Base):
+    __tablename__ = "Agents"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_agent_name"),
+    )
 
-# def expires_in_15m() -> datetime:
-#     return datetime.now(timezone.utc) + timedelta(minutes=3)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Foreign key + relationship
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("Users.id", ondelete="CASCADE"), nullable=False)
+    user: Mapped["User"] = relationship("User", back_populates="agents")
 
-# class Session(Base):
-#     __tablename__ = "Sessions"
-
-#     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("Users.id", ondelete="CASCADE"), nullable=False)
-
-#     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
-#     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=expires_in_15m)
-
-
-#     def is_expired(self) -> bool:
-#         return utcnow() >= self.expires_at

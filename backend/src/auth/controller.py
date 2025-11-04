@@ -2,8 +2,7 @@ from fastapi import APIRouter, Request, Request, Response
 from ..db.core import DbSession
 from dotenv import load_dotenv
 from . import service
-from . import model
-load_dotenv()
+from . import models
 
 
 router = APIRouter(
@@ -14,16 +13,16 @@ router = APIRouter(
 
 # STANDARD LOGIN ROUTES
 @router.post("/signup")
-async def signup(data: model.SignupRequest, request: Request, db: DbSession):
+async def signup(data: models.SignupRequest, request: Request, db: DbSession):
     return service.signup(data, request, db)
 
 
 @router.post("/login")
-async def login(data: model.LoginRequest, request: Request, db: DbSession, response: Response):
+async def login(data: models.LoginRequest, request: Request, db: DbSession, response: Response):
     return service.login(data, request, db, response)
 
 
-# OAUTH ROUTES
+# OAUTH ROUTES TODO: MAKE THESE WORK
 @router.get("/googleLogin")
 def redirect_to_google_oauth():
     return service.redirect_to_google_oauth()

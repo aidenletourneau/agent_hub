@@ -1,20 +1,20 @@
-import json
 import os
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Request, HTTPException, Response
+from fastapi import Depends, Request, Request, HTTPException, Response, status
 from fastapi.responses import RedirectResponse, JSONResponse
 from ..db.core import DbSession
 import bcrypt
-
+from fastapi.security import OAuth2PasswordBearer
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport.requests import Request as GoogleRequest
 from dotenv import load_dotenv
 from ..db.schemas import User
 from sqlalchemy import or_
-from pydantic import BaseModel
 import jwt
 import datetime
+from . import models
 load_dotenv()
 
 
@@ -71,13 +71,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-class SignupRequest(BaseModel):
-    username: str
-    email: str
-    password: str
-
-
-def signup(data: SignupRequest, request: Request, db: DbSession):
+def signup(data: models.SignupRequest, request: Request, db: DbSession):
     username = data.username
     email = data.email
     password = data.password
@@ -103,10 +97,6 @@ def signup(data: SignupRequest, request: Request, db: DbSession):
     return {"message": "User created successfully", "user": {"username": new_user.username, "email": new_user.email}}
 
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
 
 def create_jwt(user: User) -> str:
     payload = {
@@ -123,7 +113,7 @@ def create_jwt(user: User) -> str:
 
 
 
-def login(data: LoginRequest, request: Request, db: DbSession, response: Response):
+def login(data: models.LoginRequest, request: Request, db: DbSession, response: Response):
     username = data.username
     password = data.password
 
@@ -195,3 +185,33 @@ def google_oauth_callback(request: Request, db: DbSession, code: str | None = No
     response = Response
     return {"jwt": jwt}
 
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY")
+JWT_ALGORITHM=os.getenv("JWT_ALGORITHM")
+CurrentToken = Annotated[str, Depends(oauth2_scheme)]
+
+def verify_token(token: str) -> models.TokenData:
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM], audience="users", issuer="agent-hub")
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token: no sub")
+        return models.TokenData(user_id=user_id)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+
+
+def get_current_user(token: CurrentToken, db: DbSession) -> models.TokenData:
+    return verify_token(token)
+
+CurrentUser = Annotated[models.TokenData, Depends(get_current_user)]
