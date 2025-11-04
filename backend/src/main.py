@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-from .db.core import engine, Base
 from .api import register_routes
 
 
