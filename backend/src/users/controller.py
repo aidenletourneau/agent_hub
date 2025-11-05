@@ -3,10 +3,8 @@ from fastapi import APIRouter, Depends, Request, Request, Response, status
 from pydantic import BaseModel
 from ..db.core import DbSession
 from ..db.schemas import User, Agent
-from dotenv import load_dotenv
 from . import service
 from . import models
-from fastapi import HTTPException
 from ..auth.service import CurrentUser
 
 from fastapi.security import OAuth2PasswordBearer

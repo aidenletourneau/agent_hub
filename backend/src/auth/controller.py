@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Request, Request, Response
 from ..db.core import DbSession
-from dotenv import load_dotenv
 from . import service
 from . import models
-
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordRequestForm
 
 router = APIRouter(
     prefix="/auth",
@@ -21,6 +21,10 @@ async def signup(data: models.SignupRequest, request: Request, db: DbSession):
 async def login(data: models.LoginRequest, request: Request, db: DbSession, response: Response):
     return service.login(data, request, db, response)
 
+@router.post("/docs-login")
+async def login(request: Request, db: DbSession, response: Response, form: OAuth2PasswordRequestForm = Depends()):
+    data = models.LoginRequest(username=form.username, password=form.password)
+    return service.login(data, request, db, response)
 
 # OAUTH ROUTES TODO: MAKE THESE WORK
 @router.get("/googleLogin")

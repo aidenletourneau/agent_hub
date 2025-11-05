@@ -144,7 +144,7 @@ def login(data: models.LoginRequest, request: Request, db: DbSession, response: 
         path="/",
     )
     response.status_code = 200
-    return response
+    return {"access_token": jwt, "token_type": "bearer"}
 
 
 def google_oauth_callback(request: Request, db: DbSession, code: str | None = None, state: str | None = None):
@@ -186,7 +186,7 @@ def google_oauth_callback(request: Request, db: DbSession, code: str | None = No
     return {"jwt": jwt}
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/docs-login")
 JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM=os.getenv("JWT_ALGORITHM")
 CurrentToken = Annotated[str, Depends(oauth2_scheme)]
