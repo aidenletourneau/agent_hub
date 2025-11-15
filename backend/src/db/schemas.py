@@ -1,3 +1,4 @@
+from typing import Any
 from sqlalchemy import (
     String, DateTime, Boolean, ForeignKey, Index, func, UniqueConstraint, Text
 )
@@ -35,6 +36,17 @@ class User(Base):
 
     # agent mapping
     agents: Mapped[list["Agent"]] = relationship("Agent", back_populates="user", cascade="all, delete-orphan")
+
+    def to_safe_json(self) -> dict[str, Any]:
+        return {
+            "id": str(self.id),
+            "username": self.username,
+            "email": self.email,
+            "name": self.name,
+            "image_url": self.image_url,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 class Agent(Base):

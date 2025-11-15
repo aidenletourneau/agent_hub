@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Annotated
 
@@ -15,7 +16,6 @@ from sqlalchemy import or_
 import jwt
 import datetime
 from . import models
-load_dotenv()
 
 
 SCOPES = [
@@ -23,18 +23,17 @@ SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
   "openid"
 ]
-
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
 CLIENT_CONFIG = {
     "web": {
         "client_id": os.getenv("GOOGLE_CLIENT_ID"),
         "project_id": os.getenv("GOOGLE_PROJECT_ID"),
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "auth_uri": os.getenv("GOOGLE_AUTH_URI"),
+        "token_uri": os.getenv("GOOGLE_TOKEN_URI"),
+        "auth_provider_x509_cert_url": os.getenv("GOOGLE_AUTH_PROVIDER_X509_CERT_URL"),
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
         "redirect_uris": [os.getenv("GOOGLE_REDIRECT_URI")],
-        "javascript_origins": ["http://localhost:3000", "http://localhost:8000"],
+        "javascript_origins": os.getenv("GOOGLE_JAVASCRIPT_ORIGINS").split(','),
     }
 }
 
@@ -144,7 +143,9 @@ def login(data: models.LoginRequest, request: Request, db: DbSession, response: 
         path="/",
     )
     response.status_code = 200
-    return {"access_token": jwt, "token_type": "bearer"}
+
+    userDict = user.to_safe_json()
+    return {"user": userDict}
 
 
 def google_oauth_callback(request: Request, db: DbSession, code: str | None = None, state: str | None = None):
@@ -167,23 +168,41 @@ def google_oauth_callback(request: Request, db: DbSession, code: str | None = No
         os.getenv("GOOGLE_CLIENT_ID")           
     )
 
-    # create a new user
-    user = User(
-        google_sub=idinfo["sub"],
-        email=idinfo.get("email"),
-        image_url=idinfo.get("picture"),
-        username=idinfo.get("email")
-    )
+    # check if user exists
+    user: User = db.query(User).filter(User.google_sub == idinfo["sub"]).first()
+    
+    if not user:
+        # create a new user
+        user = User(
+            google_sub=idinfo["sub"],
+            email=idinfo.get("email"),
+            image_url=idinfo.get("picture"),
+            username=idinfo.get("email")
+        )
 
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    
 
     # create jwt
     jwt = create_jwt(user)
 
-    response = Response
-    return {"jwt": jwt}
+    FRONTEND_URL = os.getenv("LOCAL_FRONTEND_URL")
+    # redirect to homepage
+    response = RedirectResponse(f"{FRONTEND_URL}", status_code=302)
+    response.set_cookie(
+        key="access_token",
+        value=jwt,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=15*60,
+        path="/",
+    )
+    return response
+
+
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/docs-login")
@@ -197,6 +216,7 @@ def verify_token(token: str) -> models.TokenData:
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token: no sub")
+        
         return models.TokenData(user_id=user_id)
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -215,3 +235,11 @@ def get_current_user(token: CurrentToken, db: DbSession) -> models.TokenData:
     return verify_token(token)
 
 CurrentUser = Annotated[models.TokenData, Depends(get_current_user)]
+
+
+def logout(request: Request, response: Response):
+    response.delete_cookie(
+        key="access_token",
+        path="/"
+    )
+    return {"detail": "logged out"}
