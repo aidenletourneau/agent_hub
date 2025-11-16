@@ -22,11 +22,6 @@ def get_db():
             status_code=500,
             detail=f"Database connection failed: {str(e.orig)}"
         )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error creating DB session: {str(e)}"
-        )
     finally:
         db.close()
         
