@@ -6,6 +6,8 @@ from . import service
 from . import models
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordRequestForm
+from .service import CurrentUserId, CurrentUser
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 router = APIRouter(
     prefix="/auth",
@@ -14,22 +16,10 @@ router = APIRouter(
 
 # GET THE CURRENT USER BASED ON ACCESS TOKEN
 @router.get("/me")
-async def get_current_user(request: Request, db: DbSession, response: Response):
-    access_token = request.cookies.get("access_token")
-
-    token_data: models.TokenData = service.verify_token(access_token)
-    user_id = token_data.user_id
-
-    user: User = db.query(User).filter(User.id == user_id).first()
-
-    if not user:
-        pass
-
+async def get_current_user(response: Response, user: CurrentUser):
     response.status_code = 200
     safe_user_json = user.to_safe_json()
     return {"user": safe_user_json}
-
-
 
 
 # STANDARD LOGIN ROUTES
@@ -44,11 +34,6 @@ async def login(data: models.LoginRequest, request: Request, db: DbSession, resp
 @router.post("/logout")
 async def login(request: Request, response: Response):
     return service.logout(request, response)
-
-@router.post("/docs-login")
-async def login(request: Request, db: DbSession, response: Response, form: OAuth2PasswordRequestForm = Depends()):
-    data = models.LoginRequest(username=form.username, password=form.password)
-    return service.login(data, request, db, response)
 
 # OAUTH ROUTES TODO: MAKE THESE WORK
 @router.get("/googleLogin")

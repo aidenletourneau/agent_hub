@@ -5,7 +5,7 @@ from ..db.core import DbSession
 from ..db.schemas import User, Agent
 from . import service
 from . import models
-from ..auth.service import CurrentUser
+from ..auth.service import CurrentUserId
 
 from fastapi.security import OAuth2PasswordBearer
 
@@ -18,5 +18,5 @@ router = APIRouter(
 )
 
 @router.get("/me", response_model=models.UserResponse)
-def get_current_user(current_user: CurrentUser, db: DbSession):
+def get_current_user(current_user: CurrentUserId, db: DbSession):
     return service.get_user_by_id(db, current_user.get_uuid())

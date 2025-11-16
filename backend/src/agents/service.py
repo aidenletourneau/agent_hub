@@ -3,7 +3,7 @@ from ..db.core import DbSession
 from ..db.schemas import User, Agent
 from dotenv import load_dotenv
 from . import models
-from ..auth.service import CurrentUser
+from ..auth.service import CurrentUserId
 from fastapi import HTTPException
 
 from fastapi.security import OAuth2PasswordBearer
@@ -11,9 +11,9 @@ from fastapi.security import OAuth2PasswordBearer
 oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-def get_all_agents(db: DbSession, user: CurrentUser):
+def get_all_agents(db: DbSession, user: CurrentUserId):
     try:
-        agents = db.query(Agent).filter(Agent.user_id == user.user_id).all()
+        agents = db.query(Agent).filter(Agent.user_id == user).all()
         return agents
     except Exception:
         raise HTTPException(
@@ -22,7 +22,7 @@ def get_all_agents(db: DbSession, user: CurrentUser):
         )
     
 
-def create_agent(data: models.CreateAgentRequest, db: DbSession, response: Response, user: CurrentUser):
+def create_agent(data: models.CreateAgentRequest, db: DbSession, response: Response, user: CurrentUserId):
     # check if username already in db
     existing_agent = db.query(Agent).filter(Agent.name == data.name, Agent.user_id == user.user_id).first()
     if existing_agent:

@@ -6,7 +6,7 @@ from fastapi import Depends, Request, Request, HTTPException, Response, status
 from fastapi.responses import RedirectResponse, JSONResponse
 from ..db.core import DbSession
 import bcrypt
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, APIKeyCookie
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport.requests import Request as GoogleRequest
@@ -16,6 +16,7 @@ from sqlalchemy import or_
 import jwt
 import datetime
 from . import models
+
 
 
 SCOPES = [
@@ -37,7 +38,7 @@ CLIENT_CONFIG = {
     }
 }
 
-
+# ================ GOOGLE OAUTH2 ================
 def build_oauth_flow(state: str | None = None) -> Flow:
     flow = Flow.from_client_config(
         CLIENT_CONFIG,
@@ -62,6 +63,63 @@ def redirect_to_google_oauth():
     response.set_cookie("oauth_state", state, httponly=True, secure=False, samesite="lax")
     return response
 
+
+def google_oauth_callback(request: Request, db: DbSession, code: str | None = None, state: str | None = None):
+    
+    state_cookie = request.cookies.get("oauth_state")
+    if not state or not state_cookie or state != state_cookie:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    flow = build_oauth_flow(state=state)
+    
+    # code for token exchange
+    flow.fetch_token(code=code)
+
+    creds = flow.credentials
+    id_token_value = creds.id_token 
+
+    idinfo = id_token.verify_oauth2_token(
+        id_token_value,
+        GoogleRequest(),           # this is for internal google oauth use
+        os.getenv("GOOGLE_CLIENT_ID")           
+    )
+
+    # check if user exists
+    user: User = db.query(User).filter(User.google_sub == idinfo["sub"]).first()
+    
+    if not user:
+        # create a new user
+        user = User(
+            google_sub=idinfo["sub"],
+            email=idinfo.get("email"),
+            image_url=idinfo.get("picture"),
+            username=idinfo.get("email")
+        )
+
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    
+
+    # create jwt
+    jwt = create_jwt(user)
+
+    FRONTEND_URL = os.getenv("LOCAL_FRONTEND_URL")
+    # redirect to homepage
+    response = RedirectResponse(f"{FRONTEND_URL}", status_code=302)
+    response.set_cookie(
+        key="access_token",
+        value=jwt,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=15*60,
+        path="/",
+    )
+    return response
+
+
+# ================ CUSTOM AUTH ================
 def hash_password(plain: str) -> str:
     salt = bcrypt.gensalt(rounds=12)  # 12–14 is common
     return bcrypt.hashpw(plain.encode(), salt).decode()
@@ -145,79 +203,31 @@ def login(data: models.LoginRequest, request: Request, db: DbSession, response: 
     response.status_code = 200
 
     userDict = user.to_safe_json()
-    return {"user": userDict}
+    return {"access_token": jwt, "user": userDict}
 
 
-def google_oauth_callback(request: Request, db: DbSession, code: str | None = None, state: str | None = None):
-    
-    state_cookie = request.cookies.get("oauth_state")
-    if not state or not state_cookie or state != state_cookie:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
-
-    flow = build_oauth_flow(state=state)
-    
-    # code for token exchange
-    flow.fetch_token(code=code)
-
-    creds = flow.credentials
-    id_token_value = creds.id_token 
-
-    idinfo = id_token.verify_oauth2_token(
-        id_token_value,
-        GoogleRequest(),           # this is for internal google oauth use
-        os.getenv("GOOGLE_CLIENT_ID")           
-    )
-
-    # check if user exists
-    user: User = db.query(User).filter(User.google_sub == idinfo["sub"]).first()
-    
-    if not user:
-        # create a new user
-        user = User(
-            google_sub=idinfo["sub"],
-            email=idinfo.get("email"),
-            image_url=idinfo.get("picture"),
-            username=idinfo.get("email")
-        )
-
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    
-
-    # create jwt
-    jwt = create_jwt(user)
-
-    FRONTEND_URL = os.getenv("LOCAL_FRONTEND_URL")
-    # redirect to homepage
-    response = RedirectResponse(f"{FRONTEND_URL}", status_code=302)
-    response.set_cookie(
+def logout(request: Request, response: Response):
+    response.delete_cookie(
         key="access_token",
-        value=jwt,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        max_age=15*60,
-        path="/",
+        path="/"
     )
-    return response
+    return {"detail": "logged out"}
 
 
 
+cookie_scheme = APIKeyCookie(name="access_token")
+CurrentToken = Annotated[str, Depends(cookie_scheme)]
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/docs-login")
 JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM=os.getenv("JWT_ALGORITHM")
-CurrentToken = Annotated[str, Depends(oauth2_scheme)]
 
-def verify_token(token: str) -> models.TokenData:
+def verify_token(token: str) -> models.AccessTokenData:
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM], audience="users", issuer="agent-hub")
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token: no sub")
-        
-        return models.TokenData(user_id=user_id)
+        return models.AccessTokenData(user_id=user_id)
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -231,15 +241,20 @@ def verify_token(token: str) -> models.TokenData:
 
 
 
-def get_current_user(token: CurrentToken, db: DbSession) -> models.TokenData:
-    return verify_token(token)
+def get_current_user_id(token: CurrentToken) -> str:
+    tokenData: models.AccessTokenData = verify_token(token)
+    user = tokenData.user_id
+    return user
 
-CurrentUser = Annotated[models.TokenData, Depends(get_current_user)]
+CurrentUserId = Annotated[str, Depends(get_current_user_id)]
 
 
-def logout(request: Request, response: Response):
-    response.delete_cookie(
-        key="access_token",
-        path="/"
-    )
-    return {"detail": "logged out"}
+def get_current_user_by_id(user_id: CurrentUserId, db: DbSession) -> User:
+    user: User = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found from id")
+    return user
+
+CurrentUser = Annotated[User, Depends(get_current_user_by_id)]
+
+

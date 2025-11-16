@@ -10,7 +10,7 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-class TokenData(BaseModel):
+class AccessTokenData(BaseModel):
     user_id: str | None = None
 
     def get_uuid(self) -> UUID | None:
