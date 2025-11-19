@@ -1,3 +1,4 @@
+from email.policy import default
 from typing import Any
 from sqlalchemy import (
     String, DateTime, Boolean, ForeignKey, Index, func, UniqueConstraint, Text
@@ -51,12 +52,17 @@ class User(Base):
 
 class Agent(Base):
     __tablename__ = "Agents"
-    __table_args__ = (
-        UniqueConstraint("name", name="uq_agent_name"),
-    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Agent Card Fields
+    protocolVersion: Mapped[str] = mapped_column(String(10), default="0.3.0")
     name: Mapped[str] = mapped_column(String(40), nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=False)
+    url: Mapped[str] = mapped_column(String(255), default="http://agenthub.com/a2a")
+    version: Mapped[str] = mapped_column(String(255), default="0.1")
+
+    # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
